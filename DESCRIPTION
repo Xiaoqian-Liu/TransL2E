@@ -1,0 +1,31 @@
+Package: TranL2E
+Title: Robust Transfer Learning via L2E Criterion
+Version: 1.0.0
+Authors@R: 
+    c(
+        person(given = "Haoming", family = "Shi", email = "hs75@rice.edu", role = c("aut", "cre")),
+        person(given = "Xiaoqian", family = "Liu", email = "xiaoqian.liu@ucr.edu", role = c("aut", "ctb"))
+    )
+Description: A method to simultaneously tackle data limitation and contamination under the structured regression setting by integrating transfer learning with the robust L2E criterion.
+License: GPL (>= 2)
+Imports:
+    stats,
+    MASS (>= 7.3-60),
+    grpreg (>= 3.5.0),
+    ncvreg (>= 3.14.1),
+    Matrix (>= 1.5.0),
+    doParallel (>= 1.0.17),
+    doRNG (>= 1.8.6.2),
+    foreach (>= 1.5.2)
+Suggests:
+    tibble,
+    glmnet (>= 4.1.0),
+    remotes,
+    ggplot2,
+    dplyr,
+    knitr,
+    rmarkdown
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.1
+VignetteBuilder: knitr
