@@ -25,9 +25,9 @@ select_source <- function(target, source) {
   n_s = length(source)
   n_t = length(target)
   
-  # # 1. Kernel density estimates for source & target
-  dens_S <- density(source, from = 0, to = 1)
-  dens_T <- density(target, from = 0, to = 1)
+  # 1. Kernel density estimates for source & target
+  dens_S <- density(source, from = 0, to = 1, n = max(1000, n_s), bw = 0.05)
+  dens_T <- density(target, from = 0, to = 1, n = max(1000, n_t), bw = 0.05)
   
   # We'll approximate f_S(s_j) and f_T(s_j) at each source weight s_j
   ratio_vec <- numeric(n_s)
