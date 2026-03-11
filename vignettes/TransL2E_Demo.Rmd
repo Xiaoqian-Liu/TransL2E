@@ -15,14 +15,256 @@ knitr::opts_chunk$set(
 ```
 
 ## Package Install
-```{r setup}
-# install package from github
+```{r setup, message=FALSE, echo=TRUE, eval=TRUE, warning=FALSE}
+# install TransL2E package from github
 if (!requireNamespace("TransL2E", quietly = TRUE)) {
-    devtools::install_github("haomingsj98/TransL2E")
+    remotes::install_github("haomingsj98/TransL2E")
 }
 
 library(TransL2E)
+
+# load library for Trans_GLM
+library(glmnet)
+library(glmtrans)
+
+# some logistic package
+library(MASS)
+library(stats)
+library(tibble)
 ```
 
 
 ## Sparse Regression 
+```{r, echo=TRUE, eval=TRUE}
+# a function to simulate the covariance matrix
+source_cov = function(p, rho){
+  
+  source_covariance = matrix(0, nrow = p, ncol = p)
+  for (i in 1:p) {
+    for (j in 1:p) {
+      source_covariance[i,j] = rho^abs(i-j)
+    }
+  }
+  return(source_covariance)
+}
+
+# a function to create given number of source datasets
+source_cre <- function(n_s, p, p_s, beta_t, snr, sigma_s, Sigma_S, K, out_prop, out_sig) {
+  
+  # Generate a list of K source datasets
+  source_list <- lapply(seq_len(K), function(i) {
+    # Generate design matrix for the current source
+    X <- mvrnorm(n = n_s, mu = rep(0, p), Sigma = Sigma_S)
+    
+    # Create a shift vector for beta
+    delta_s <- rep(0, p)
+    shift_index = sample(1:p, p_s, replace = F)
+    delta_s[shift_index] <- rnorm(p_s, mean = 0, sd = sigma_s)
+    #delta_s[1:p_s] <- rnorm(p_s, mean = 0, sd = sigma_s)
+    
+    # Adjust beta_t with the current shift to obtain beta_s
+    beta_s <- beta_t + delta_s
+    
+    # Generate response vector Y with additive noise
+    Y <- X %*% beta_s + rnorm(n_s, mean = 0, sd = snr)
+    
+    # Introduce outliers to a proportion of the responses
+    n_out <- floor(n_s * out_prop)
+    Y[1:n_out] <- Y[1:n_out] + out_sig*max(abs(Y))
+    
+    # Introduce outliers to a proportion of the covariates
+    #X[1:n_out, ] = X[1:n_out, ] + out_sig
+    
+    # Return the source dataset in the desired list format
+    list(x = X, y = Y)
+  })
+  
+  return(source_list)
+}
+
+
+# define parameters
+sigma_snr = 1
+
+p = 100 # parameters
+n_t = 200 # target sample size
+n_s = 400 # source sample size
+
+K = 5 # number of source
+
+rho = 0.5 # level of covariate shift
+Sigma = source_cov(p, rho)
+
+beta_t = matrix(0, nrow = p)
+beta_t[1:(0.1*p), 1] = 1 # 10% sparsity
+
+sigma_ms = 0.2 # model shift level
+p_s = 0.3*p
+
+# outlier proportion and signal level
+out_prop = 0.1
+out_sig = 2
+
+# lambda seuence
+lambda_seq = exp(seq(log(10), log(10^-4), length.out = 20))
+
+set.seed(1)
+# simulate the target sample
+X_t = matrix(rnorm(n_t * p), nrow = n_t, ncol = p) # target covariates
+y_t = X_t %*% beta_t + rnorm(n_t, mean = 0, sd = sigma_snr) # target response
+    
+# add outler to the samples
+y_t[1:(n_t * out_prop)] = y_t[1:(n_t * out_prop)] + out_sig*max(y_t)
+
+# simulate the source dataset
+cur_data = source_cre(n_s = n_s, p = p, p_s = p_s, beta_t = beta_t,
+                      snr = sigma_snr, sigma_s = sigma_ms, Sigma_S = Sigma,
+                      K = K, out_prop = out_prop, out_sig = out_sig)
+
+```
+
+
+
+
+### Base L2E with Target Data Only
+```{r, echo=TRUE, eval=TRUE}
+set.seed(1)
+# Run Base L2E on Target Data Only
+Time1_start = proc.time()
+    
+# Fit the l2e lasso model
+sol_mm_cv <- CV_L2E_sparse_ncv(y_t, X_t, penalty = 'lasso', nfolds = 5, trace = FALSE)
+
+      
+sol_mm_opt = L2E_sparse_ncv(y_t, X_t, lambdaSeq = sol_mm_cv$lambda.1se, penalty = 'lasso', Show.Time = FALSE)
+      
+Time_plain_l2e = (proc.time() - Time1_start)[[3]]
+
+# square error for parameter estimation
+plain_l2e = norm(beta_t - sol_mm_opt$Beta, '2')/norm(beta_t, '2')
+        
+TP_plain_l2e <- length(intersect(which(abs(sol_mm_opt$Beta)>=0.05), which(beta_t!=0)))
+FP_plain_l2e <- length(intersect(which(abs(sol_mm_opt$Beta)>=0.05), which(beta_t==0)))
+FN_plain_l2e <- length(intersect(which(abs(sol_mm_opt$Beta)<=0.05), which(beta_t!=0)))
+F1_plain_l2e <- 2*TP_plain_l2e/(2*TP_plain_l2e+FP_plain_l2e+FN_plain_l2e)
+SR_plain_l2e <- (TP_plain_l2e+(length(beta_t)-TP_plain_l2e-FP_plain_l2e-FN_plain_l2e))/length(beta_t)
+TPR_plain_l2e <- TP_plain_l2e/length(which(beta_t!=0))
+FPR_plain_l2e <- FP_plain_l2e/length(which(beta_t==0))
+        
+
+print(paste0('Base L2E Estimation Error: ', round(plain_l2e, 3)))
+print(paste0('Base L2E F1 Score: ', round(F1_plain_l2e, 3)))    
+
+```
+
+
+### Base glmnet Lasso with Target Data Only
+```{r, echo=TRUE, eval=TRUE}
+set.seed(1)
+# Run glmnet with lasso on target
+Time2_start = proc.time()
+    
+# do a baseline lasso regression with glmnet
+cv_lasso <- cv.glmnet(X_t, y_t, alpha = 1, lambdaSeq = lambda_seq, intercept = FALSE, nfolds = 5)
+lasso_best <- glmnet(X_t, y_t, alpha = 1, lambda = cv_lasso$lambda.1se, intercept = FALSE)
+    
+Time_plain_lasso = (proc.time() - Time2_start)[[3]]
+    
+    
+beta_plain_lasso = as.vector(coef(lasso_best))[-1]
+    
+# square error for parameter estimation
+plain_lasso = norm(beta_t - beta_plain_lasso, '2')/norm(beta_t, '2')
+    
+TP_plain_lasso <- length(intersect(which(abs(beta_plain_lasso)>=0.05), which(beta_t!=0)))
+FP_plain_lasso <- length(intersect(which(abs(beta_plain_lasso)>=0.05), which(beta_t==0)))
+FN_plain_lasso <- length(intersect(which(abs(beta_plain_lasso)<=0.05), which(beta_t!=0)))
+F1_plain_lasso <- 2*TP_plain_lasso/(2*TP_plain_lasso+FP_plain_lasso+FN_plain_lasso)
+SR_plain_lasso <- (TP_plain_lasso+(length(beta_t)-TP_plain_lasso-FP_plain_lasso-FN_plain_lasso))/length(beta_t)
+TPR_plain_lasso <- TP_plain_lasso/length(which(beta_t!=0))
+FPR_plain_lasso <- FP_plain_lasso/length(which(beta_t==0))
+
+
+print(paste0('Base Lasso Estimation Error: ', round(plain_lasso, 3)))
+print(paste0('Base Lasso F1 Score: ', round(F1_plain_lasso, 3)))  
+```
+
+
+### Trans_L2E
+```{r, echo=TRUE, eval=TRUE, warning=FALSE}
+# Run TransL2E
+Time3_start <- proc.time()
+
+Trans_L2E_estimation <- TL_L2E_sparse(y_t, X_t, source_list = cur_data, core = 1, debias = TRUE, seed = 1,
+                                lambda_detect = "lambda.1se", lambda_colearn="lambda.1se",
+                                lambda_debias="lambda.min")
+
+
+Time_with_debias <- (proc.time() - Time3_start)["elapsed"]
+Trans_L2E_error <- norm(beta_t - Trans_L2E_estimation$Coefficients, "2")/norm(beta_t, '2')
+
+# F1 Score
+TP_with_Trans_L2E <- length(intersect(which(abs(Trans_L2E_estimation$Coefficients)>=0.05), which(beta_t!=0)))
+FP_with_Trans_L2E <- length(intersect(which(abs(Trans_L2E_estimation$Coefficients)>=0.05), which(beta_t==0)))
+FN_with_Trans_L2E <- length(intersect(which(abs(Trans_L2E_estimation$Coefficients)<=0.05), which(beta_t!=0)))
+F1_with_Trans_L2E <- 2*TP_with_Trans_L2E/(2*TP_with_Trans_L2E+FP_with_Trans_L2E+FN_with_Trans_L2E)
+SR_with_Trans_L2E <- (TP_with_Trans_L2E+(length(beta_t)-TP_with_Trans_L2E-FP_with_Trans_L2E-FN_with_Trans_L2E))/length(beta_t)
+TPR_with_Trans_L2E <- TP_with_Trans_L2E/length(which(beta_t!=0))
+FPR_with_Trans_L2E <- FP_with_Trans_L2E/length(which(beta_t==0))
+
+
+# Record source selection proportion
+source_prop <- sum(sapply(Trans_L2E_estimation$Selected_Source, function(src) nrow(src$y))) / (n_s * K)
+
+print(paste0('TransL2E Estimation Error: ', round(Trans_L2E_error, 3)))
+print(paste0('TransL2E F1 Score: ', round(F1_with_Trans_L2E, 3))) 
+print(paste0('TransL2E Source Data Selection Proportion: ', round(source_prop, 3)))  
+
+```
+
+### Trans_GLM
+```{r, echo=TRUE, eval=TRUE, warning=FALSE}
+set.seed(1)
+# Run transfer glm with gaussian distribution
+Time4_start = proc.time()
+
+# run Transfer glm function
+fit.tlglm <- glmtrans(list(x = X_t, y = y_t), cur_data, intercept = FALSE, 
+                      detection.info = TRUE, nfolds = 5)
+    
+Time_tl_glm = (proc.time() - Time4_start)[[3]]
+    
+# beta estimate for tl_glm
+beta_tlglm = as.vector(fit.tlglm$beta)[-1]
+    
+# square error for parameter estimation
+tl_glm = norm(beta_t - beta_tlglm, '2')/norm(beta_t, '2')
+    
+TP_tl_glm <- length(intersect(which(abs(beta_tlglm)>=0.05), which(beta_t!=0)))
+FP_tl_glm <- length(intersect(which(abs(beta_tlglm)>=0.05), which(beta_t==0)))
+FN_tl_glm <- length(intersect(which(abs(beta_tlglm)<=0.05), which(beta_t!=0)))
+F1_tl_glm <- 2*TP_tl_glm/(2*TP_tl_glm+FP_tl_glm+FN_tl_glm)
+SR_tl_glm <- (TP_tl_glm+(length(beta_t)-TP_tl_glm-FP_tl_glm-FN_tl_glm))/length(beta_t)
+TPR_tl_glm <- TP_tl_glm/length(which(beta_t!=0))
+FPR_tl_glm <- FP_tl_glm/length(which(beta_t==0))
+    
+source_num <- length(fit.tlglm$transfer.source.id)
+    
+
+print(paste0('Trans_GLM Estimation Error: ', round(tl_glm, 3)))
+print(paste0('Trans_GLM F1 Score: ', round(F1_tl_glm, 3)))  
+    
+```
+
+### Results Summary
+```{r, echo=TRUE, eval=TRUE, warning=FALSE}
+# combine result together
+
+estimation_error = c(plain_l2e, plain_lasso, Trans_L2E_error, tl_glm)
+F1_score = c(F1_plain_l2e, F1_plain_lasso, F1_with_Trans_L2E, F1_tl_glm)
+Method_name = c('Base L2E', 'Glmnet Lasso', 'TransL2E', 'TransGLM')
+
+results_table = tibble(Method = Method_name, Estimation_Error = estimation_error,
+                       F1_Score = F1_score)
+print(results_table)
+```

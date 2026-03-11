@@ -127,13 +127,13 @@ TL_L2E_glasso <- function(y_t, X_t, source_list, group,
   registerDoRNG(seed)
   
   loop_results <- foreach(i = seq_along(source_list),
-                          .packages = c("TranL2E", "grpreg", "glmnet", "stats", "MASS", "Matrix"),
+                          .packages = c("TransL2E", "grpreg", "glmnet", "stats", "MASS", "Matrix"),
                           .export = c(
                             "y_t","X_t","source_list","n_t",
                             "penalty","group","max_iter","tol","nfolds","lambda_detect"
                           )) %dorng% {
                             
-    select_source <- utils::getFromNamespace("select_source", "TranL2E")
+    select_source <- utils::getFromNamespace("select_source", "TransL2E")
     
     # start parallel computing
     current_source <- source_list[[i]]

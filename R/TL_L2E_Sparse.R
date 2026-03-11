@@ -119,13 +119,13 @@ TL_L2E_sparse <- function(y_t, X_t, source_list,
   registerDoRNG(seed)
   
   loop_results <- foreach(i = seq_along(source_list),
-                          .packages = c("TranL2E", "ncvreg", "stats", "MASS", "Matrix"),
+                          .packages = c("TransL2E", "ncvreg", "stats", "MASS", "Matrix"),
                           .export = c(
                             "y_t","X_t","source_list","n_t",
                             "penalty","max_iter","tol","nfolds","lambda_detect"
                           )) %dorng% {
                             
-    select_source <- utils::getFromNamespace("select_source", "TranL2E")
+    select_source <- utils::getFromNamespace("select_source", "TransL2E")
     
     # start parallel computing
     current_source <- source_list[[i]]
