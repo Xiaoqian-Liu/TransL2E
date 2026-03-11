@@ -1,0 +1,28 @@
+---
+title: "TransL2E_Demo"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{TransL2E_Demo}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Package Install
+```{r setup}
+# install package from github
+if (!requireNamespace("TransL2E", quietly = TRUE)) {
+    devtools::install_github("haomingsj98/TransL2E")
+}
+
+library(TransL2E)
+```
+
+
+## Sparse Regression 
