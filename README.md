@@ -13,7 +13,7 @@ Comprehensive simulation studies and a real data application demonstrate the sup
 To install the latest stable version of the package (from GitHub):
 
 ``` r
-devtools::install_github("haomingsj98/TranL2E")
+devtools::install_github("haomingsj98/TransL2E")
 ```
 
 
