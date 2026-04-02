@@ -25,7 +25,7 @@ To run TransL2E with sparse regression, use the `TL_L2E_sparse` function with th
 
 To run TransL2E with group-sparse regression, use the `TL_L2E_glasso` function with the required input.
 
-Please see the introductory [demo](https://haomingsj98.github.io/TransL2E/articles/TransL2E_Demo.html) on how to use the TransL2E framework with sparse regression examples.
+Please see the introductory [demo](https://xiaoqian-liu.github.io/TransL2E/articles/TransL2E_Demo.html) on how to use the TransL2E framework with sparse regression examples.
 
 
 ## Contact
