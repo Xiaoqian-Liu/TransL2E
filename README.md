@@ -6,8 +6,7 @@
 
 A method to simultaneously tackle data limitation and contamination under the structured regression setting by integrating transfer learning with the robust L2E criterion.
 
-*Jointly developed with [Xiaoqian Liu](https://xiaoqian-liu.github.io/)
-*
+*Jointly developed by [Haoming Shi](https://haomingsj98.github.io/) and [Xiaoqian Liu](https://xiaoqian-liu.github.io/)*
 
 ## Introduction
 This repository presents the R package `TransL2E` developed for the manuscript titled "Transfer Learning for Robust Structured Regression with Bi-level Source Detection". It offers transfer learning methods that accounts for contamination in both target and source data while effectively transferring information from source to target. The current package support both sparse regression and group-sparse regression.
@@ -17,7 +16,7 @@ This repository presents the R package `TransL2E` developed for the manuscript t
 To install the latest stable version of the package (from GitHub):
 
 ``` r
-devtools::install_github("haomingsj98/TransL2E")
+devtools::install_github("Xiaoqian-Liu/TransL2E")
 ```
 
 ## Implementation
