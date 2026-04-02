@@ -32,4 +32,7 @@ Please see the introductory [demo](https://xiaoqian-liu.github.io/TransL2E/artic
 
 Please reach out to xiaoqian.liu@ucr.edu and hs75@rice.edu for any questions. 
 
+## Citation
+
+Manuscript will be available online soon. 
 
