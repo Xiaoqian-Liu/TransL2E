@@ -30,6 +30,6 @@ Please see the introductory [demo](https://xiaoqian-liu.github.io/TransL2E/artic
 
 ## Contact
 
-Please reach out to xiaoqian.liu@ucr.edu for any questions. 
+Please reach out to xiaoqian.liu@ucr.edu and hs75@rice.edu for any questions. 
 
 
