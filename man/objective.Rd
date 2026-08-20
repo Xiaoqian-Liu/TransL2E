@@ -4,7 +4,7 @@
 \alias{objective}
 \title{Objective function of the L2E regression - eta}
 \usage{
-objective(eta, r, method = "mean")
+objective(eta, r, method = "mean", r_sq = r^2)
 }
 \arguments{
 \item{eta}{The current estimate of eta}
@@ -12,6 +12,9 @@ objective(eta, r, method = "mean")
 \item{r}{Vector of residuals}
 
 \item{method}{Mean or median}
+
+\item{r_sq}{Optional pre-computed \code{r^2}; supplied by callers that already
+hold it, to avoid recomputing the squared residuals on every evaluation.}
 }
 \value{
 Returns the output of the objective function (scalar)

@@ -17,34 +17,33 @@
 #' @param max_iter Maximum number of iterations
 #' @param tol Relative tolerance
 #' @return Returns a list object containing the updated beta (vector) and the number of iterations used.
-#' @importFrom Matrix Diagonal
 #' @importFrom grpreg grpreg
 #' 
 #' @keywords internal
 update_beta_group <- function(y, X, beta, tau, lambda, penalty, group, max_iter = 1e2, tol = 1e-4) {
-  n <- nrow(X)
-  
+
+  # y may arrive as an n-by-1 matrix (the transfer-learning entry points build it
+  # with rbind); coerce once so the row scaling below recycles correctly.
+  y <- as.vector(y)
+
   for (i in 1:max_iter) {
     beta_last <- beta
-    Xbeta <- X %*% beta
-    r <- y - Xbeta
-    # Compute weights (same as in the sparse update)
-    w <- as.vector(exp(-0.5 * (tau * r)^2))
-    
-    # Form the weighted design matrix and response
-    W <- Diagonal(n = n, x = sqrt(w))
-    Xtilde <- as.matrix(W %*% X)
-    ytilde <- as.vector(W %*% y)
-    
+    r <- y - as.vector(X %*% beta)
+
+    # Scaling the rows of X and y by sqrt(w) is exactly diag(sqrt(w)) %*% X,
+    # but avoids building a sparse Matrix and coercing it back to dense.
+    sw <- sqrt(exp(-0.5 * (tau * r)^2))
+
     # grpreg
-    fit <- grpreg(X = Xtilde, y = ytilde, group = group, penalty = penalty, family = "gaussian",
+    fit <- grpreg(X = X * sw, y = y * sw, group = group, penalty = penalty, family = "gaussian",
                   lambda = lambda)
     beta <- as.vector(fit$beta)[-1]
-    
+
     # Check convergence on beta
-    if (norm(as.matrix(beta_last - beta), 'f') < tol * (1 + norm(as.matrix(beta_last), 'f'))) break
+    d <- beta_last - beta
+    if (sqrt(sum(d*d)) < tol * (1 + sqrt(sum(beta_last*beta_last)))) break
   }
-  
+
   return(list(beta = beta, iter = i))
 }
 
@@ -100,14 +99,15 @@ l2e_regression_group_accel <- function(y, X, beta, tau, lambda, group, penalty,
     
     
     # Update tau using update_eta_bktk function
-    r <- y - X %*% beta_new
+    r <- as.vector(y) - as.vector(X %*% beta_new)
     eta_last <- log(tau)
     res_eta <- update_eta_bktk(r, eta_last, tol = tol)
     eta <- res_eta$eta
     tau <- max(exp(eta), 1e-10)
-    
+
     # check convergence on both beta and tau
-    conv_beta <- norm(as.matrix(beta_curr - beta_new), 'f') < tol * (1 + norm(as.matrix(beta_curr), 'f'))
+    d <- beta_curr - beta_new
+    conv_beta <- sqrt(sum(d*d)) < tol * (1 + sqrt(sum(beta_curr*beta_curr)))
     conv_tau  <- abs(eta_last - eta)              < tol * (1 + abs(eta_last))
     beta_curr <- beta_new
     if (conv_beta && conv_tau) break

@@ -11,32 +11,32 @@
 #' @param max_iter Maximum number of iterations
 #' @param tol Relative tolerance
 #' @return Returns a list object containing the new estimate for beta (vector) and the number of iterations (scalar).
-#' @importFrom Matrix Diagonal
 #' @importFrom ncvreg ncvfit
 #'
 #' @keywords internal
 #'
 update_beta_sparse_ncv <- function(y,X,beta,tau,lambda, penalty, max_iter=1e2,tol=1e-4) {
-  
-  n <- nrow(X)
-  
+
+  # y may arrive as an n-by-1 matrix (the transfer-learning entry points build it
+  # with rbind); coerce once so the row scaling below recycles correctly.
+  y <- as.vector(y)
+
   for (i in 1:max_iter) {
-    
+
     beta_last <- beta
-    Xbeta <- X %*% beta
-    r <- y - Xbeta
-    w <- as.vector(exp(-0.5*(tau*r)^2 ))
-    
-    
-    W <- Diagonal(n=n, x = sqrt(as.vector(w)))
-    Xtilde <- as.matrix(W%*%X)
-    ytilde <- as.vector(W%*%y)
-    beta <- as.vector(ncvfit(Xtilde, ytilde, init = beta_last, penalty=penalty,lambda = lambda,
+    r <- y - as.vector(X %*% beta)
+
+    # Scaling the rows of X and y by sqrt(w) is exactly diag(sqrt(w)) %*% X,
+    # but avoids building a sparse Matrix and coercing it back to dense.
+    sw <- sqrt(exp(-0.5*(tau*r)^2))
+
+    beta <- as.vector(ncvfit(X*sw, y*sw, init = beta_last, penalty=penalty,lambda = lambda,
                              max.iter = 100, warn = FALSE)$beta)
-    
-    if (norm(as.matrix(beta_last-beta),'f') < tol*(1 + norm(as.matrix(beta_last),'f'))) break
+
+    d <- beta_last - beta
+    if (sqrt(sum(d*d)) < tol*(1 + sqrt(sum(beta_last*beta_last)))) break
   }
-  
+
   return(list(beta=beta,iter=i))
 }
 
@@ -87,15 +87,16 @@ l2e_regression_sparse_ncv <- function(y, X, beta, tau, lambda, penalty, max_iter
     beta_new <- sol_beta$beta
     
     # update tau
-    r <- y - X%*%beta_new
+    r <- as.vector(y) - as.vector(X%*%beta_new)
     eta_last <- log(tau)  # get eta as in line 9
     res_eta <- update_eta_bktk(r,eta_last, tol=tol) # update eta as in line 10-12
     eta <- res_eta$eta
     tau <- max(exp(eta), 1e-10) # update tau as in line 13
-    
-    
+
+
     # Check for convergence
-    A <- norm(as.matrix(beta_curr-beta_new),'f') < tol*(1 + norm(as.matrix(beta_curr),'f'))
+    d <- beta_curr - beta_new
+    A <- sqrt(sum(d*d)) < tol*(1 + sqrt(sum(beta_curr*beta_curr)))
     B <- abs(eta_last-eta) < tol*(1 + abs(eta_last))
     beta_curr <- beta_new
     if (A & B) break
@@ -440,43 +441,49 @@ update_eta_bktk <- function(r, eta, max_iter=1e2, tol=1e-10) {
   if ( exp(eta)<=0 ) print("non-positive initial tau in update_eta_bktk")
   
   for (i in 1:max_iter) {
-    
+
     eta_last <- eta
     tau_last <- exp(eta_last)  # avoid computing tau_last in the following
-    
+
     # some elements for computing the derivatives
     v1 <- exp(-0.5*tau_last^2*r_sq) # the w_i's
     v2 <- r_sq*v1
-    
+
     if(all(round(v1,2)==1)) break # Check if v1 is close to 1
-    
-    first_derivative <- tau_last/(2*sqrt(pi)) - tau_last*sqrt(2/pi)*mean(v1)+
-      tau_last^3*sqrt(2/pi)*mean(v2)
+
+    mean_v1 <- mean(v1)
+    mean_v2 <- mean(v2)
+
+    first_derivative <- tau_last/(2*sqrt(pi)) - tau_last*sqrt(2/pi)*mean_v1+
+      tau_last^3*sqrt(2/pi)*mean_v2
     first_derivative_seq[i] <- first_derivative
-    
-    second_derivative <- tau_last/(2*sqrt(pi))+ 4*tau_last^3*sqrt(2/pi)*mean(v2)
+
+    second_derivative <- tau_last/(2*sqrt(pi))+ 4*tau_last^3*sqrt(2/pi)*mean_v2
     second_derivative_seq[i] <- second_derivative
-    
-    
+
+
     lam <-  first_derivative^2/second_derivative
     if(lam < tol) break
-    
+
     ### backtracking
     dd <- -first_derivative/second_derivative
-    f1 <- objective(eta_last + stepsize*dd, r)
-    f0 <- objective(eta_last, r)
-    
-    
+    f1 <- objective(eta_last + stepsize*dd, r, r_sq=r_sq)
+    # objective(eta_last, r) re-derives exp(-0.5*exp(2*eta_last)*r^2), which is
+    # already held in v1; reuse it instead of a second O(n) pass.
+    f0 <- tau_last/(2*sqrt(pi)) - tau_last*sqrt(2/pi)*mean_v1
+
+
     while (f1>f0-0.5*stepsize*lam) {
       stepsize <- stepsize_shrinkage*stepsize
-      f1 <- objective(eta_last + stepsize*dd, r)
+      f1 <- objective(eta_last + stepsize*dd, r, r_sq=r_sq)
     }
-    
+
     eta <- eta_last + stepsize*dd
     stepsize <- 1
-    
+
     Eta[i] <- eta
-    Obj[i] <- objective(eta, r)
+    # the accepted backtracking evaluation f1 is objective() at exactly this eta
+    Obj[i] <- f1
   }
   
   if(i>max_iter) i=i-1
@@ -522,13 +529,15 @@ objective_tau <- function(tau, r, method="mean"){
 #' @param eta The current estimate of eta
 #' @param r Vector of residuals
 #' @param method Mean or median
+#' @param r_sq Optional pre-computed \code{r^2}; supplied by callers that already
+#' hold it, to avoid recomputing the squared residuals on every evaluation.
 #' @return Returns the output of the objective function (scalar)
 #' @importFrom stats median
 #' @keywords internal
-objective <- function(eta, r, method="mean"){
-  
-  v1 <- exp(-0.5*exp(2*eta)*r^2)
-  
+objective <- function(eta, r, method="mean", r_sq=r^2){
+
+  v1 <- exp(-0.5*exp(2*eta)*r_sq)
+
   s1 <- exp(eta)/(2*sqrt(pi))
   
   if(method=="mean"){

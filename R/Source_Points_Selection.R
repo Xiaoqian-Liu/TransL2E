@@ -29,19 +29,13 @@ select_source <- function(target, source) {
   dens_S <- density(source, from = 0, to = 1, n = max(1000, n_s), bw = 0.05)
   dens_T <- density(target, from = 0, to = 1, n = max(1000, n_t), bw = 0.05)
   
-  # We'll approximate f_S(s_j) and f_T(s_j) at each source weight s_j
-  ratio_vec <- numeric(n_s)
-  
-  for (j in 1:n_s) {
-    s_val <- source[j]
-    
-    # Approximate the densities at s_val
-    fS_val <- approx(dens_S$x, dens_S$y, xout = s_val, rule = 2)$y
-    fT_val <- approx(dens_T$x, dens_T$y, xout = s_val, rule = 2)$y
-    
-    ratio_vec[j] <- fT_val * s_val / (fS_val + 10^-8)
-  }
-  
+  # Approximate f_S(s_j) and f_T(s_j) at every source weight s_j at once;
+  # approx() is already vectorised over xout, so one call replaces n_s calls.
+  fS_val <- approx(dens_S$x, dens_S$y, xout = source, rule = 2)$y
+  fT_val <- approx(dens_T$x, dens_T$y, xout = source, rule = 2)$y
+
+  ratio_vec <- fT_val * source / (fS_val + 10^-8)
+
   # compute hellinger distance
   hd = hellinger_distance(target, source)
   

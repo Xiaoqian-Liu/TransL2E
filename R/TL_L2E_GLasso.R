@@ -127,7 +127,7 @@ TL_L2E_glasso <- function(y_t, X_t, source_list, group,
   registerDoRNG(seed)
   
   loop_results <- foreach(i = seq_along(source_list),
-                          .packages = c("TransL2E", "grpreg", "glmnet", "stats", "MASS", "Matrix"),
+                          .packages = c("TransL2E", "grpreg", "glmnet", "stats", "MASS"),
                           .export = c(
                             "y_t","X_t","source_list","n_t",
                             "penalty","group","max_iter","tol","nfolds","lambda_detect"

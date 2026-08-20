@@ -119,7 +119,7 @@ TL_L2E_sparse <- function(y_t, X_t, source_list,
   registerDoRNG(seed)
   
   loop_results <- foreach(i = seq_along(source_list),
-                          .packages = c("TransL2E", "ncvreg", "stats", "MASS", "Matrix"),
+                          .packages = c("TransL2E", "ncvreg", "stats", "MASS"),
                           .export = c(
                             "y_t","X_t","source_list","n_t",
                             "penalty","max_iter","tol","nfolds","lambda_detect"

@@ -13,7 +13,6 @@ Imports:
     MASS (>= 7.3-60),
     grpreg (>= 3.5.0),
     ncvreg (>= 3.14.1),
-    Matrix (>= 1.5.0),
     doParallel (>= 1.0.17),
     doRNG (>= 1.8.6.2),
     foreach (>= 1.5.2)
